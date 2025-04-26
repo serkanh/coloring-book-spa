@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - postgres
+      - localstack
+    environment:
+      - PORT=8000
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/coloringbook
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
+      - S3_UPLOAD_BUCKET=coloringbook-uploads
+      - S3_PROCESSED_BUCKET=coloringbook-processed
+      - S3_FINAL_BUCKET=coloringbook-final-pdfs
+      - AWS_ENDPOINT=http://localstack:4566
+      - OPENAI_API_KEY=dummy_openai_key
+      - CLERK_API_KEY=test_clerk_key
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=coloringbook
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # LocalStack - local AWS services
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DISABLE_CORS=1
+      - PERSISTENCE=0
+    volumes:
+      - ./localstack:/docker-entrypoint-initaws.d
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Setup service - initializes localstack resources
+  setup:
+    image: amazon/aws-cli:latest
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      sleep 10 &&
+      aws --endpoint-url=http://localstack:4566 s3 mb s3://coloringbook-uploads &&
+      aws --endpoint-url=http://localstack:4566 s3 mb s3://coloringbook-processed &&
+      aws --endpoint-url=http://localstack:4566 s3 mb s3://coloringbook-final-pdfs &&
+      aws --endpoint-url=http://localstack:4566 s3api put-bucket-cors --bucket coloringbook-uploads --cors-configuration '{\"CORSRules\":[{\"AllowedHeaders\":[\"*\"],\"AllowedMethods\":[\"GET\",\"PUT\",\"POST\",\"DELETE\",\"HEAD\"],\"AllowedOrigins\":[\"*\"],\"ExposeHeaders\":[\"ETag\"]}]}' &&
+      echo 'S3 buckets created and configured with CORS'
+      "
+    depends_on:
+      - localstack
+
+volumes:
+  postgres_data:
