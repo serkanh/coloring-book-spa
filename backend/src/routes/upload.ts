@@ -7,6 +7,7 @@ import path from 'path';
 // Import with dynamic require to work around TypeScript issues
 const { uploadController } = require('../controllers/uploadController');
 const { authMiddleware } = require('../utils/authMiddleware');
+const { processController } = require('../controllers/processController');
 
 dotenv.config();
 
@@ -44,10 +45,17 @@ const upload = multer({
   },
 });
 
-// Regular routes
+// Regular upload routes
 router.post('/image', authMiddleware, upload.array('images', 24), uploadController.uploadImages);
 router.get('/status/:uploadId', authMiddleware, uploadController.getUploadStatus);
 router.get('/presigned-url', authMiddleware, uploadController.getPresignedUrl);
+
+// Image processing routes
+router.post('/process', authMiddleware, upload.single('image'), processController.processImage);
+router.get('/process/status/:jobId', authMiddleware, processController.getProcessingStatus);
+router.get('/process/image/:jobId', authMiddleware, processController.getProcessedImage);
+router.post('/process/confirm/:jobId', authMiddleware, processController.confirmProcessedImage);
+router.delete('/process/cancel/:jobId', authMiddleware, processController.cancelProcessing);
 
 // Debugging endpoints - no auth required for testing
 router.get('/debug/list-buckets', async (req, res) => {

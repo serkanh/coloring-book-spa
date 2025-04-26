@@ -25,8 +25,8 @@ services:
       - S3_PROCESSED_BUCKET=coloringbook-processed
       - S3_FINAL_BUCKET=coloringbook-final-pdfs
       - AWS_ENDPOINT=http://localstack:4566
-      - OPENAI_API_KEY=dummy_openai_key
-      - CLERK_API_KEY=test_clerk_key
+    env_file:
+      - backend/.env
 
   # PostgreSQL database
   postgres:
