@@ -44,3 +44,4 @@ terraform/.terraform/
 # Temporary files
 *.tmp
 *.temp
+**/temp/*
