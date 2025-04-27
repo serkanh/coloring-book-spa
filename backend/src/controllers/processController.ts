@@ -26,10 +26,11 @@ const s3 = new AWS.S3(s3Options);
 // Keep track of processing images
 const processingJobs: Record<string, {
   originalImageId: string;
-  processedImageId: string;
+  processedImageId?: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   message?: string;
   processedImageUrl?: string;
+  base64Image?: string;
 }> = {};
 
 export const processController = {
@@ -76,10 +77,12 @@ export const processController = {
 
         // Store processed info
         processingJobs[jobId].status = 'completed';
+        processingJobs[jobId].base64Image = result.base64Image;
 
-        // Create a proper URL to fetch the image via our API, not using the file:// URL
-        processingJobs[jobId].processedImageId = processedImageId;
-        // We'll get the image through the API endpoint
+        // Optionally store processed image path if available
+        if (result.processedImagePath) {
+          processingJobs[jobId].processedImageId = processedImageId;
+        }
 
         console.log(`Image processing completed for job ${jobId}`);
       } catch (error) {
@@ -106,22 +109,31 @@ export const processController = {
 
       const job = processingJobs[jobId];
 
-      // Create a URL for the image if status is completed
-      let processedImageUrl;
-      if (job.status === 'completed') {
-        // Use direct URL to static temp file for faster rendering
-        const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
-        const filename = `${job.processedImageId}_output.png`;
-        processedImageUrl = `${baseUrl}/temp/${filename}`;
-        console.log(`Setting processed image URL: ${processedImageUrl}`);
-      }
-
-      return res.status(200).json({
+      // Prepare response object
+      const response: any = {
         jobId,
         status: job.status,
         message: job.message,
-        processedImageUrl: processedImageUrl,
-      });
+      };
+
+      // If job is completed, include image data
+      if (job.status === 'completed') {
+        // Include base64 image data if available
+        if (job.base64Image) {
+          response.base64Image = job.base64Image;
+          console.log('Returning base64 image data in response');
+        }
+
+        // Include URL as fallback (for backwards compatibility)
+        if (job.processedImageId) {
+          const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
+          const filename = `${job.processedImageId}_output.png`;
+          response.processedImageUrl = `${baseUrl}/temp/${filename}`;
+          console.log(`Setting processed image URL: ${response.processedImageUrl}`);
+        }
+      }
+
+      return res.status(200).json(response);
     } catch (error) {
       console.error('Error getting processing status:', error);
       return res.status(500).json({ message: 'Server error getting processing status' });
@@ -146,6 +158,18 @@ export const processController = {
           message: 'Image processing not completed',
           status: job.status
         });
+      }
+
+      // If we have base64 data, return it
+      if (job.base64Image) {
+        return res.status(200).json({
+          base64Image: job.base64Image
+        });
+      }
+
+      // Otherwise try to get the file from disk
+      if (!job.processedImageId) {
+        return res.status(404).json({ message: 'No processed image ID found' });
       }
 
       const imageBuffer = getProcessedImage(job.processedImageId);
@@ -183,10 +207,20 @@ export const processController = {
         });
       }
 
-      const imageBuffer = getProcessedImage(job.processedImageId);
+      // Get image buffer, either from base64 or from file
+      let imageBuffer: Buffer;
 
-      if (!imageBuffer) {
-        return res.status(404).json({ message: 'Processed image not found' });
+      if (job.base64Image) {
+        // Convert base64 to buffer
+        imageBuffer = Buffer.from(job.base64Image, 'base64');
+      } else if (job.processedImageId) {
+        const tempBuffer = getProcessedImage(job.processedImageId);
+        if (!tempBuffer) {
+          return res.status(404).json({ message: 'Processed image not found' });
+        }
+        imageBuffer = tempBuffer;
+      } else {
+        return res.status(404).json({ message: 'No image data available' });
       }
 
       // Upload to S3
@@ -207,8 +241,10 @@ export const processController = {
 
       console.log('S3 upload result:', uploadResult);
 
-      // Clean up temporary files
-      cleanupTempFiles(job.processedImageId);
+      // Clean up temporary files if they exist
+      if (job.processedImageId) {
+        cleanupTempFiles(job.processedImageId);
+      }
 
       // Remove job from memory
       delete processingJobs[jobId];
@@ -248,7 +284,7 @@ export const processController = {
 
       const job = processingJobs[jobId];
 
-      // Clean up temporary files
+      // Clean up temporary files if they exist
       if (job.processedImageId) {
         cleanupTempFiles(job.processedImageId);
       }

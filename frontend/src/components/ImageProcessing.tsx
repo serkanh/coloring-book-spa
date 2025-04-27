@@ -71,7 +71,21 @@ const ImageProcessing: React.FC<ImageProcessingProps> = ({
           setStatus(response.status);
 
           if (response.status === 'completed') {
-            setProcessedPreview(getProcessedImageUrl(id));
+            // If we have a base64 image, use that directly
+            if (response.base64Image) {
+              setProcessedPreview(`data:image/png;base64,${response.base64Image}`);
+              console.log('Using base64 image data');
+            }
+            // Otherwise, fall back to the URL
+            else if (response.processedImageUrl) {
+              setProcessedPreview(response.processedImageUrl);
+              console.log('Using image URL');
+            }
+            // If no image data returned, use the old method
+            else {
+              setProcessedPreview(getProcessedImageUrl(id));
+              console.log('Using legacy method for image preview');
+            }
             clearInterval(intervalId);
           } else if (response.status === 'failed') {
             setError(response.message || 'Image processing failed. Please try again.');

@@ -44,6 +44,7 @@ export const processImage = async (
 export const getProcessingStatus = async (jobId: string): Promise<{
   status: 'pending' | 'processing' | 'completed' | 'failed';
   processedImageUrl?: string;
+  base64Image?: string;
   message?: string;
 }> => {
   try {

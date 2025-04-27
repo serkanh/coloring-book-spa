@@ -29,7 +29,7 @@ if (!fs.existsSync(TEMP_DIR)) {
 export const convertToSketch = async (
   imageBuffer: Buffer,
   prompt = 'Convert this image to a black and white sketch suitable for a coloring book'
-): Promise<{ processedImageUrl: string; processedImagePath: string }> => {
+): Promise<{ base64Image: string; processedImagePath?: string }> => {
   try {
     console.log('Starting image conversion to sketch...');
 
@@ -55,7 +55,7 @@ export const convertToSketch = async (
       type: 'image/png',
     });
 
-    // Call OpenAI API with the new approach
+    // Call OpenAI API
     const response = await openai.images.edit({
       model: "gpt-image-1",
       image: image,
@@ -64,46 +64,32 @@ export const convertToSketch = async (
 
     console.log('OpenAI API response received');
 
-    // Write the response to a file for inspection
-    const responseLogPath = path.join(TEMP_DIR, 'openai-response.json');
-    fs.writeFileSync(
-      responseLogPath,
-      JSON.stringify({
-        fullResponse: response,
-        data: response.data,
-        firstItem: response.data && response.data.length > 0 ? response.data[0] : null
-      }, null, 2)
-    );
-    console.log(`Full response written to ${responseLogPath} for inspection`);
-
     // Check if response data exists
     if (!response.data || response.data.length === 0) {
       throw new Error('No data returned from OpenAI');
     }
 
-    // Get the URL from the response
-    const imageUrl = response.data[0]?.url;
-    console.log('Image URL extracted:', imageUrl);
+    // Get the b64_json from the response based on the structure you provided
+    const base64Image = response.data[0]?.b64_json;
+    console.log('Base64 image extraction:', base64Image ? 'successful' : 'failed');
 
-    if (!imageUrl) {
-      throw new Error('No image URL returned from OpenAI');
+    if (!base64Image) {
+      throw new Error('No b64_json found in OpenAI response');
     }
 
-    console.log('Image URL from OpenAI:', imageUrl);
-
-    // Download the image from the URL
-    const imageResponse = await fetch(imageUrl);
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const image_bytes = Buffer.from(arrayBuffer);
-    fs.writeFileSync(outputImagePath, image_bytes);
-
-    console.log(`Image processed successfully. Saved to ${outputImagePath}`);
+    // Optionally save the image to disk for reference/debugging
+    fs.writeFileSync(outputImagePath, Buffer.from(base64Image, 'base64'));
+    console.log(`Image saved to disk at ${outputImagePath}`);
 
     // Clean up input file
-    fs.unlinkSync(inputImagePath);
+    try {
+      fs.unlinkSync(inputImagePath);
+    } catch (err) {
+      console.error('Error cleaning up input file:', err);
+    }
 
     return {
-      processedImageUrl: '', // The controller will generate the proper URL
+      base64Image,
       processedImagePath: outputImagePath,
     };
   } catch (error) {
@@ -119,19 +105,21 @@ export const convertToSketch = async (
 const mockImageProcessing = async (
   inputImagePath: string,
   outputImagePath: string
-): Promise<{ processedImageUrl: string; processedImagePath: string }> => {
+): Promise<{ base64Image: string; processedImagePath?: string }> => {
   console.log('Using mock image processing - simulating a sketch effect');
 
   // For simplicity in this mock version, we'll just copy the file
   // In a real implementation with Sharp, we would apply filters here
   fs.copyFileSync(inputImagePath, outputImagePath);
 
+  // Read the file and convert to base64
+  const imageBuffer = fs.readFileSync(outputImagePath);
+  const base64Image = imageBuffer.toString('base64');
+
   console.log('Mock processing complete');
 
-  // Return the output path only - don't create a file:// URL
-  // The controller will handle creating the proper URL
   return {
-    processedImageUrl: '', // Empty URL since controller will handle this
+    base64Image,
     processedImagePath: outputImagePath,
   };
 };
@@ -139,23 +127,36 @@ const mockImageProcessing = async (
 /**
  * Get the processed image by its ID
  */
-export const getProcessedImage = (imageId: string): Buffer | null => {
+export const getProcessedImage = (imageId?: string): Buffer | null => {
+  if (!imageId) {
+    console.log('No image ID provided to getProcessedImage');
+    return null;
+  }
+
   const imagePath = path.join(TEMP_DIR, `${imageId}_output.png`);
 
   if (fs.existsSync(imagePath)) {
+    console.log(`Retrieved processed image from ${imagePath}`);
     return fs.readFileSync(imagePath);
   }
 
+  console.log(`Image file not found at ${imagePath}`);
   return null;
 };
 
 /**
  * Clean up temporary files
  */
-export const cleanupTempFiles = (imageId: string): void => {
+export const cleanupTempFiles = (imageId?: string): void => {
+  // If no imageId is provided, return early
+  if (!imageId) {
+    return;
+  }
+
   const outputPath = path.join(TEMP_DIR, `${imageId}_output.png`);
 
   if (fs.existsSync(outputPath)) {
     fs.unlinkSync(outputPath);
+    console.log(`Cleaned up temporary file: ${outputPath}`);
   }
 };
