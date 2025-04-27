@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,71 +36,76 @@ export const convertToSketch = async (
     // Generate temporary file paths
     const inputImageId = uuidv4();
     const inputImagePath = path.join(TEMP_DIR, `${inputImageId}_input.png`);
-    const maskImagePath = path.join(TEMP_DIR, `${inputImageId}_mask.png`);
     const outputImageId = uuidv4();
     const outputImagePath = path.join(TEMP_DIR, `${outputImageId}_output.png`);
 
     // Write input image to disk
     fs.writeFileSync(inputImagePath, imageBuffer);
 
-    // Create a transparent mask (optional for edit)
-    // For full image transformation, we can use a simple transparent PNG
-    fs.writeFileSync(maskImagePath, Buffer.from([
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-      0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-      0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
-    ]));
-
     // For development/testing without actual OpenAI API calls, uncomment this mock
-    // Use the mock implementation for development/testing
-    return mockImageProcessing(inputImagePath, outputImagePath);
-
-    /*
-    // The following code is commented out because of issues with the OpenAI API's
-    // image format requirements. If those are resolved, uncomment this section.
+    if (process.env.USE_MOCK_OPENAI === 'true') {
+      console.log('Using mock OpenAI processing');
+      return mockImageProcessing(inputImagePath, outputImagePath);
+    }
 
     console.log('Calling OpenAI API to process image...');
 
-    const response = await openai.images.edit({
-      image: fs.createReadStream(inputImagePath),
-      mask: fs.createReadStream(maskImagePath),
-      prompt: prompt,
-      n: 1,
-      size: '1024x1024',
-      response_format: 'url',
+    // Convert the image to a OpenAI-compatible file object
+    const image = await toFile(fs.createReadStream(inputImagePath), null, {
+      type: 'image/png',
     });
 
-    console.log('OpenAI API response:', response);
+    // Call OpenAI API with the new approach
+    const response = await openai.images.edit({
+      model: "gpt-image-1",
+      image: image,
+      prompt: prompt
+    });
+
+    console.log('OpenAI API response received');
+
+    // Write the response to a file for inspection
+    const responseLogPath = path.join(TEMP_DIR, 'openai-response.json');
+    fs.writeFileSync(
+      responseLogPath,
+      JSON.stringify({
+        fullResponse: response,
+        data: response.data,
+        firstItem: response.data && response.data.length > 0 ? response.data[0] : null
+      }, null, 2)
+    );
+    console.log(`Full response written to ${responseLogPath} for inspection`);
+
+    // Check if response data exists
+    if (!response.data || response.data.length === 0) {
+      throw new Error('No data returned from OpenAI');
+    }
 
     // Get the URL from the response
-    const processedImageUrl = response.data && response.data[0] && response.data[0].url ? response.data[0].url : '';
+    const imageUrl = response.data[0]?.url;
+    console.log('Image URL extracted:', imageUrl);
 
-    if (!processedImageUrl) {
+    if (!imageUrl) {
       throw new Error('No image URL returned from OpenAI');
     }
 
-    // Download the image from the URL
-    const imageResponse = await fetch(processedImageUrl);
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    console.log('Image URL from OpenAI:', imageUrl);
 
-    // Save the processed image
-    fs.writeFileSync(outputImagePath, buffer);
+    // Download the image from the URL
+    const imageResponse = await fetch(imageUrl);
+    const arrayBuffer = await imageResponse.arrayBuffer();
+    const image_bytes = Buffer.from(arrayBuffer);
+    fs.writeFileSync(outputImagePath, image_bytes);
 
     console.log(`Image processed successfully. Saved to ${outputImagePath}`);
 
-    // Clean up input files
+    // Clean up input file
     fs.unlinkSync(inputImagePath);
-    fs.unlinkSync(maskImagePath);
 
     return {
-      processedImageUrl,
+      processedImageUrl: '', // The controller will generate the proper URL
       processedImagePath: outputImagePath,
     };
-    */
   } catch (error) {
     console.error('Error processing image with OpenAI:', error);
     throw error;

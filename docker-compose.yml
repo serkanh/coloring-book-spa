@@ -26,6 +26,7 @@ services:
       - S3_PROCESSED_BUCKET=coloringbook-processed
       - S3_FINAL_BUCKET=coloringbook-final-pdfs
       - AWS_ENDPOINT=http://localstack:4566
+      - USE_MOCK_OPENAI=false
     env_file:
       - backend/.env
 
