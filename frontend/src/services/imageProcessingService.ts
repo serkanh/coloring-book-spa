@@ -95,3 +95,21 @@ export const cancelProcessing = async (jobId: string): Promise<void> => {
     throw error;
   }
 };
+
+/**
+ * Delete a processed image from S3
+ * @param imageUrl The S3 URL of the processed image to delete
+ * @returns Promise that resolves when the image is deleted
+ */
+export const deleteProcessedImage = async (imageUrl: string): Promise<void> => {
+  try {
+    console.log('Deleting processed image:', imageUrl);
+    await axios.delete(`${API_URL}/uploads/process/image`, {
+      params: { imageUrl }
+    });
+    console.log('Image deleted successfully');
+  } catch (error) {
+    console.error('Error deleting processed image:', error);
+    throw error;
+  }
+};

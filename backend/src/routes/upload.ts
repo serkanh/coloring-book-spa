@@ -56,6 +56,7 @@ router.get('/process/status/:jobId', authMiddleware, processController.getProces
 router.get('/process/image/:jobId', authMiddleware, processController.getProcessedImage);
 router.post('/process/confirm/:jobId', authMiddleware, processController.confirmProcessedImage);
 router.delete('/process/cancel/:jobId', authMiddleware, processController.cancelProcessing);
+router.delete('/process/image', authMiddleware, uploadController.deleteProcessedImage);
 
 // Debugging endpoints - no auth required for testing
 router.get('/debug/list-buckets', async (req, res) => {

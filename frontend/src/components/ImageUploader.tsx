@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import ImageProcessing from './ImageProcessing';
+import { deleteProcessedImage } from '../services/imageProcessingService';
 
 interface ImageUploaderProps {
   maxFiles: number;
@@ -25,6 +26,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   const [processingFile, setProcessingFile] = useState<File | null>(null);
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([]);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isDeletingImage, setIsDeletingImage] = useState<number | null>(null);
 
   // Handle file drop
   const onDrop = useCallback(
@@ -242,12 +244,40 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
           <h3 className="font-medium text-lg">Processed Images ({processedImages.length}/{minFiles} required)</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-3">
             {processedImages.map((processedImg, index) => (
-              <div key={index} className="relative">
+              <div key={index} className="relative group">
                 <img
                   src={processedImg.processedUrl}
                   alt={`Processed ${index + 1}`}
                   className="h-24 w-24 object-cover rounded-lg"
                 />
+                <button
+                  onClick={async () => {
+                    try {
+                      setIsDeletingImage(index);
+                      setError(null);
+
+                      // Delete from S3
+                      await deleteProcessedImage(processedImg.processedUrl);
+
+                      // Remove from local state
+                      setProcessedImages(prev => prev.filter((_, i) => i !== index));
+                    } catch (err) {
+                      console.error('Error deleting image:', err);
+                      setError('Failed to delete image. Please try again.');
+                    } finally {
+                      setIsDeletingImage(null);
+                    }
+                  }}
+                  disabled={isDeletingImage !== null}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
+                  title="Delete processed image"
+                >
+                  {isDeletingImage === index ? (
+                    <div className="animate-spin h-3 w-3 border-t-2 border-white rounded-full"></div>
+                  ) : (
+                    '×'
+                  )}
+                </button>
               </div>
             ))}
           </div>
