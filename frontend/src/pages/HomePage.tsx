@@ -82,7 +82,7 @@ const HomePage: React.FC = () => {
               </div>
               <h3 className="text-xl font-semibold mb-2">Upload Your Photos</h3>
               <p className="text-gray-600">
-                Select 8-24 of your favorite photos to transform into coloring pages.
+                Select {import.meta.env.VITE_MIN_IMAGES_REQUIRED || '8'}-24 of your favorite photos to transform into coloring pages.
                 Family portraits, vacations, pets - any photo will work!
               </p>
             </div>
@@ -145,14 +145,14 @@ const HomePage: React.FC = () => {
             Create Your Coloring Book
           </h2>
           <p className="text-center text-gray-600 max-w-3xl mx-auto mb-10">
-            Upload between 8 and 24 photos to get started. We accept JPG and PNG files.
+            Upload between {import.meta.env.VITE_MIN_IMAGES_REQUIRED || '8'} and 24 photos to get started. We accept JPG and PNG files.
             {!isAuthenticated && " Please sign in to continue."}
           </p>
 
           <div className="max-w-4xl mx-auto">
             <ImageUploader
               maxFiles={24}
-              minFiles={8}
+              minFiles={parseInt(import.meta.env.VITE_MIN_IMAGES_REQUIRED || '8', 10)}
               isDisabled={!isAuthenticated}
               onUploadComplete={handleUploadComplete}
             />
