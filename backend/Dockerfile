@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies, OpenAI, and Sharp
+RUN npm install && npm install openai sharp
 
 # Copy project files
 COPY . .

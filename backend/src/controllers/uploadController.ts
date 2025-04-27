@@ -182,4 +182,84 @@ export const uploadController = {
       return res.status(500).json({ message: 'Error generating pre-signed URL' });
     }
   },
+
+  /**
+   * Delete a processed image from S3
+   */
+  deleteProcessedImage: async (req: Request, res: Response) => {
+    try {
+      const { imageUrl } = req.query;
+
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        return res.status(400).json({ message: 'Missing or invalid image URL parameter' });
+      }
+
+      console.log(`Attempting to delete image at URL: ${imageUrl}`);
+
+      // Extract bucket and key from the URL
+      let bucket: string;
+      let key: string;
+
+      try {
+        // Parse the URL
+        const urlObj = new URL(imageUrl);
+
+        // Handle LocalStack vs AWS S3 URLs
+        if (process.env.NODE_ENV === 'development' && process.env.AWS_ENDPOINT) {
+          // For LocalStack URLs like: http://localhost:4566/bucket-name/processed/image.png
+          const pathParts = urlObj.pathname.split('/');
+          bucket = pathParts[1]; // The first part after the initial slash is the bucket name
+          key = pathParts.slice(2).join('/'); // The rest is the key
+        } else {
+          // For AWS S3 URLs like: https://bucket-name.s3.amazonaws.com/processed/image.png
+          // Or: https://s3.region.amazonaws.com/bucket-name/processed/image.png
+          const hostParts = urlObj.hostname.split('.');
+
+          if (hostParts[1] === 's3' && hostParts[2] === 'amazonaws') {
+            // URL format: bucket-name.s3.amazonaws.com
+            bucket = hostParts[0];
+            key = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+          } else if (hostParts[0] === 's3') {
+            // URL format: s3.region.amazonaws.com/bucket-name/key
+            const pathParts = urlObj.pathname.split('/');
+            bucket = pathParts[1];
+            key = pathParts.slice(2).join('/');
+          } else {
+            // Default to using configured bucket
+            bucket = process.env.S3_PROCESSED_BUCKET || 'coloringbook-processed';
+            key = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+          }
+        }
+      } catch (parseError) {
+        console.error('Error parsing image URL:', parseError);
+        return res.status(400).json({
+          message: 'Invalid image URL format',
+          error: parseError instanceof Error ? parseError.message : 'Unknown error'
+        });
+      }
+
+      console.log(`Deleting from S3: Bucket=${bucket}, Key=${key}`);
+
+      // Delete from S3
+      const params = {
+        Bucket: bucket,
+        Key: key
+      };
+
+      const deleteResult = await s3.deleteObject(params).promise();
+      console.log('S3 delete result:', deleteResult);
+
+      return res.status(200).json({
+        message: 'Image deleted successfully',
+        bucket,
+        key
+      });
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      return res.status(500).json({
+        message: 'Error deleting image',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
 };

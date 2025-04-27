@@ -1,12 +1,18 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { uploadImages } from '../services/uploadService';
+import ImageProcessing from './ImageProcessing';
+import { deleteProcessedImage } from '../services/imageProcessingService';
 
 interface ImageUploaderProps {
   maxFiles: number;
   minFiles: number;
   isDisabled?: boolean;
   onUploadComplete?: (files: File[]) => void;
+}
+
+interface ProcessedImage {
+  originalFile: File;
+  processedUrl: string;
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({
@@ -16,9 +22,13 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   onUploadComplete,
 }) => {
   const [files, setFiles] = useState<File[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  const [processingFile, setProcessingFile] = useState<File | null>(null);
+  const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([]);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isDeletingImage, setIsDeletingImage] = useState<number | null>(null);
 
+  // Handle file drop
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       // Check number of files
@@ -33,13 +43,6 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
         Object.assign(file, {
           preview: URL.createObjectURL(file),
         });
-
-        // Initialize progress for this file
-        setUploadProgress((prev) => ({
-          ...prev,
-          [file.name]: 0,
-        }));
-
         return file;
       });
 
@@ -49,24 +52,56 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     [files.length, maxFiles]
   );
 
+  // Remove a file from the list
   const removeFile = (index: number) => {
     setFiles((prevFiles) => {
       const newFiles = [...prevFiles];
 
       // Release the preview URL object to free up memory
-      URL.revokeObjectURL((newFiles[index] as any).preview);
+      URL.revokeObjectURL((newFiles[index] as File & { preview: string }).preview);
 
       newFiles.splice(index, 1);
       return newFiles;
     });
   };
 
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadResult, setUploadResult] = useState<any>(null);
+  // Handle initiating processing for a file
+  const handleProcessFile = (file: File) => {
+    setProcessingFile(file);
+  };
 
+  // Handle completion of image processing
+  const handleProcessingComplete = (processedImageUrl: string) => {
+    if (!processingFile) return;
+
+    // Add to processed images
+    setProcessedImages((prev) => [
+      ...prev,
+      {
+        originalFile: processingFile,
+        processedUrl: processedImageUrl,
+      },
+    ]);
+
+    // Remove the file from the original list
+    const fileIndex = files.findIndex((f) => f === processingFile);
+    if (fileIndex !== -1) {
+      removeFile(fileIndex);
+    }
+
+    // Clear the processing file
+    setProcessingFile(null);
+  };
+
+  // Handle cancellation of image processing
+  const handleProcessingCancel = () => {
+    setProcessingFile(null);
+  };
+
+  // Upload processed images to the server
   const handleUpload = async () => {
-    if (files.length < minFiles) {
-      setError(`Please upload at least ${minFiles} images.`);
+    if (processedImages.length < minFiles) {
+      setError(`Please process at least ${minFiles} images.`);
       return;
     }
 
@@ -74,31 +109,21 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
       setIsUploading(true);
       setError(null);
 
-      // Reset progress for all files
-      const initialProgress: Record<string, number> = {};
-      files.forEach((file) => {
-        initialProgress[file.name] = 0;
-      });
-      setUploadProgress(initialProgress);
+      // We would upload the processed images here
+      // For now, just simulate completion
+      const allProcessedUrls = processedImages.map((img) => img.processedUrl);
 
-      console.log('Uploading files to backend:', files);
+      console.log('Processed images ready to upload:', allProcessedUrls);
 
-      // Call the upload service
-      const result = await uploadImages(files, (progress) => {
-        // Update progress
-        setUploadProgress(progress);
-      });
-
-      console.log('Upload completed successfully:', result);
-      setUploadResult(result);
-
-      // Call the onUploadComplete callback
+      // In a real implementation, you would upload these URLs to your backend
+      // For demo purposes we'll just show them as completed
       if (onUploadComplete) {
-        onUploadComplete(files);
+        // Pass the original files for backward compatibility
+        onUploadComplete(processedImages.map((img) => img.originalFile));
       }
     } catch (err) {
-      console.error('Error uploading files:', err);
-      setError('Failed to upload files. Please try again.');
+      console.error('Error uploading processed images:', err);
+      setError('Failed to upload processed images. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -106,87 +131,153 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    disabled: isDisabled,
+    disabled: isDisabled || !!processingFile,
     accept: {
       'image/jpeg': [],
       'image/png': [],
     },
   });
 
+  // Determine if we can proceed with upload
+  const canUpload = processedImages.length >= minFiles;
+
   return (
     <div className="w-full">
-      <div
-        {...getRootProps()}
-        className={`border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors
-          ${isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}
-          ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 hover:bg-blue-50'}
-        `}
-      >
-        <input {...getInputProps()} />
-        {isDisabled ? (
-          <div className="text-center">
-            <p className="text-lg font-medium">Please sign in to upload photos</p>
-            <p className="text-gray-500 mt-1">
-              Create an account or log in to continue
-            </p>
-          </div>
-        ) : isDragActive ? (
-          <div className="text-center">
-            <p className="text-lg font-medium">Drop your photos here...</p>
-          </div>
-        ) : (
-          <div className="text-center">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            <p className="text-lg font-medium mt-2">
-              Drag and drop photos here, or click to browse
-            </p>
-            <p className="text-gray-500 mt-1">
-              Upload {minFiles} to {maxFiles} photos (JPG or PNG only)
-            </p>
-          </div>
-        )}
-      </div>
+      {/* Show processing UI if a file is being processed */}
+      {processingFile ? (
+        <div className="mb-6">
+          <ImageProcessing
+            originalImage={processingFile}
+            onComplete={handleProcessingComplete}
+            onCancel={handleProcessingCancel}
+          />
+        </div>
+      ) : (
+        <div
+          {...getRootProps()}
+          className={`border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors
+            ${isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}
+            ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-blue-500 hover:bg-blue-50'}
+          `}
+        >
+          <input {...getInputProps()} />
+          {isDisabled ? (
+            <div className="text-center">
+              <p className="text-lg font-medium">Please sign in to upload photos</p>
+              <p className="text-gray-500 mt-1">
+                Create an account or log in to continue
+              </p>
+            </div>
+          ) : isDragActive ? (
+            <div className="text-center">
+              <p className="text-lg font-medium">Drop your photos here...</p>
+            </div>
+          ) : (
+            <div className="text-center">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-lg font-medium mt-2">
+                Drag and drop photos here, or click to browse
+              </p>
+              <p className="text-gray-500 mt-1">
+                Upload {minFiles} to {maxFiles} photos (JPG or PNG only)
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <p className="text-red-500 mt-2">{error}</p>}
 
+      {/* Unprocessed files */}
       {files.length > 0 && (
-        <div className="mt-4">
-          <h3 className="font-medium text-lg">Selected Photos ({files.length}/{maxFiles})</h3>
+        <div className="mt-6">
+          <h3 className="font-medium text-lg">Photos to Process ({files.length})</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-3">
-            {files.map((file, index) => (
-              <div key={index} className="relative">
+            {files.map((file, index) => {
+              const fileWithPreview = file as File & { preview: string };
+              return (
+                <div key={index} className="relative">
+                  <img
+                    src={fileWithPreview.preview}
+                    alt={file.name}
+                    className="h-24 w-24 object-cover rounded-lg"
+                  />
+                  <div className="absolute -bottom-2 -right-2 space-x-1">
+                    <button
+                      onClick={() => removeFile(index)}
+                      className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md hover:bg-red-600"
+                      title="Remove"
+                    >
+                      &times;
+                    </button>
+                    <button
+                      onClick={() => handleProcessFile(file)}
+                      className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md hover:bg-blue-600"
+                      title="Process"
+                    >
+                      ✓
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Processed Images */}
+      {processedImages.length > 0 && (
+        <div className="mt-6">
+          <h3 className="font-medium text-lg">Processed Images ({processedImages.length}/{minFiles} required)</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-3">
+            {processedImages.map((processedImg, index) => (
+              <div key={index} className="relative group">
                 <img
-                  src={(file as any).preview}
-                  alt={file.name}
+                  src={processedImg.processedUrl}
+                  alt={`Processed ${index + 1}`}
                   className="h-24 w-24 object-cover rounded-lg"
                 />
                 <button
-                  onClick={() => removeFile(index)}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md hover:bg-red-600"
+                  onClick={async () => {
+                    try {
+                      setIsDeletingImage(index);
+                      setError(null);
+
+                      // Delete from S3
+                      await deleteProcessedImage(processedImg.processedUrl);
+
+                      // Remove from local state
+                      setProcessedImages(prev => prev.filter((_, i) => i !== index));
+                    } catch (err) {
+                      console.error('Error deleting image:', err);
+                      setError('Failed to delete image. Please try again.');
+                    } finally {
+                      setIsDeletingImage(null);
+                    }
+                  }}
+                  disabled={isDeletingImage !== null}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
+                  title="Delete processed image"
                 >
-                  &times;
+                  {isDeletingImage === index ? (
+                    <div className="animate-spin h-3 w-3 border-t-2 border-white rounded-full"></div>
+                  ) : (
+                    '×'
+                  )}
                 </button>
-                {uploadProgress[file.name] > 0 && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
-                    <div
-                      className="h-full bg-green-500"
-                      style={{ width: `${uploadProgress[file.name]}%` }}
-                    />
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -194,16 +285,20 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
           <div className="mt-4">
             <button
               onClick={handleUpload}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
-              disabled={files.length < minFiles}
+              className={`px-4 py-2 rounded-md transition ${
+                canUpload
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+              disabled={!canUpload || isUploading}
             >
-              Upload Photos
+              {isUploading ? 'Uploading...' : 'Create Coloring Book'}
             </button>
-            <p className="text-sm text-gray-500 mt-1">
-              {files.length < minFiles
-                ? `Please select at least ${minFiles} photos`
-                : `${files.length} photos selected`}
-            </p>
+            {!canUpload && (
+              <p className="text-sm text-gray-500 mt-1">
+                Please process at least {minFiles} images
+              </p>
+            )}
           </div>
         </div>
       )}
