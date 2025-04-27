@@ -11,21 +11,25 @@
 - Axios for API requests
 - Clerk SDK for authentication
 - Dropzone for file uploads
+- Base64 image encoding for direct preview rendering
 
 ### Backend
 
-- FastAPI (Python) or Node.js (Express) for API server
-- PostgreSQL for database
+- Node.js (Express) for API server
+- TypeScript for type safety
 - AWS SDK for cloud service integration
+- Multer for file handling
 - JWT for API authentication
-- PDFKit or similar for PDF generation
+- OpenAI API for image transformation
+- Base64 encoding for efficient image transfer
+- PDFKit or similar for PDF generation (planned)
 
 ### Cloud Services
 
 - AWS S3 for file storage (3 buckets: uploads, processed, final-pdfs)
-- AWS Lambda for serverless image processing
-- AWS CloudFront (optional) for CDN delivery of PDFs
-- OpenAI API for image transformation
+- AWS Lambda for serverless image processing (planned)
+- AWS CloudFront (optional) for CDN delivery of PDFs (planned)
+- OpenAI API for image transformation to coloring book style
 
 ### Infrastructure & DevOps
 
@@ -39,8 +43,7 @@
 ### Prerequisites
 
 - Node.js (v16+)
-- Python (v3.9+) if using FastAPI
-- PostgreSQL
+- OpenAI API key
 - AWS CLI configured with appropriate credentials
 - Docker and Docker Compose
 - Terraform CLI
@@ -50,8 +53,8 @@
 Frontend (.env.local):
 
 ```
-REACT_APP_API_URL=http://localhost:8000/api
-REACT_APP_CLERK_FRONTEND_API=your_clerk_frontend_api
+VITE_API_URL=http://localhost:8000/api
+VITE_CLERK_FRONTEND_API=your_clerk_frontend_api
 ```
 
 Backend (.env):
@@ -73,10 +76,28 @@ CLERK_API_KEY=your_clerk_api_key
 1. Clone repository
 2. Install dependencies:
    - Frontend: `npm install` or `yarn install`
-   - Backend: `pip install -r requirements.txt` or `npm install`
+   - Backend: `npm install`
 3. Start services with Docker Compose: `docker-compose up`
-4. Access frontend at <http://localhost:3000>
+4. Access frontend at <http://localhost:5173>
 5. Backend API available at <http://localhost:8000/api>
+
+## Image Processing Pipeline
+
+### Technical Implementation
+
+1. User uploads image via React Dropzone component
+2. Frontend sends image to backend API
+3. Backend:
+   - Receives file via Multer middleware
+   - Generates a processing job ID
+   - Stores temporary file in disk
+   - Calls OpenAI API with image and prompt
+   - Receives base64-encoded processed image
+   - Returns base64 data to frontend for immediate display
+   - Optionally stores in S3 when confirmed
+4. Frontend displays base64 data directly in img tag
+
+This approach solves cross-container file access issues by using base64 data transfer instead of relying on filesystem paths.
 
 ## Technical Constraints
 
@@ -95,6 +116,7 @@ CLERK_API_KEY=your_clerk_api_key
 - Use asynchronous processing for image transformation
 - Implement proper caching strategies
 - Consider CDN for delivering final PDFs
+- Balance between base64 and URL-based approaches for optimal network usage
 
 ### Scalability Requirements
 
