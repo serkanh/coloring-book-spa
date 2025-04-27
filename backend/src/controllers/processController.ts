@@ -76,7 +76,10 @@ export const processController = {
 
         // Store processed info
         processingJobs[jobId].status = 'completed';
-        processingJobs[jobId].processedImageUrl = result.processedImageUrl;
+
+        // Create a proper URL to fetch the image via our API, not using the file:// URL
+        processingJobs[jobId].processedImageId = processedImageId;
+        // We'll get the image through the API endpoint
 
         console.log(`Image processing completed for job ${jobId}`);
       } catch (error) {
@@ -103,11 +106,21 @@ export const processController = {
 
       const job = processingJobs[jobId];
 
+      // Create a URL for the image if status is completed
+      let processedImageUrl;
+      if (job.status === 'completed') {
+        // Use direct URL to static temp file for faster rendering
+        const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 8000}`;
+        const filename = `${job.processedImageId}_output.png`;
+        processedImageUrl = `${baseUrl}/temp/${filename}`;
+        console.log(`Setting processed image URL: ${processedImageUrl}`);
+      }
+
       return res.status(200).json({
         jobId,
         status: job.status,
         message: job.message,
-        processedImageUrl: job.processedImageUrl,
+        processedImageUrl: processedImageUrl,
       });
     } catch (error) {
       console.error('Error getting processing status:', error);

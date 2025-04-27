@@ -18,10 +18,21 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// Create temp directory if it doesn't exist
+const tempDir = path.join(__dirname, '../temp');
+if (!require('fs').existsSync(tempDir)) {
+  require('fs').mkdirSync(tempDir, { recursive: true });
+  console.log(`Created temp directory at ${tempDir}`);
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve temp files
+app.use('/temp', express.static(tempDir));
+console.log(`Serving static files from ${tempDir} at /temp endpoint`);
 
 // Routes
 app.use('/api/uploads', uploadRoutes);
