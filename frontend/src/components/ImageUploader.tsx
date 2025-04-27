@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import ImageProcessing from './ImageProcessing';
 import { deleteProcessedImage } from '../services/imageProcessingService';
+import { generatePdf, getPdfStatus } from '../services/pdfService';
 
 interface ImageUploaderProps {
   maxFiles: number;
@@ -17,7 +18,7 @@ interface ProcessedImage {
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({
   maxFiles = 24,
-  minFiles = 8,
+  minFiles = parseInt(import.meta.env.VITE_MIN_IMAGES_REQUIRED || '8', 10),
   isDisabled = false,
   onUploadComplete,
 }) => {
@@ -98,7 +99,41 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     setProcessingFile(null);
   };
 
-  // Upload processed images to the server
+  // State for PDF generation
+  const [pdfJobId, setPdfJobId] = useState<string | null>(null);
+  const [pdfStatus, setPdfStatus] = useState<'pending' | 'processing' | 'completed' | 'failed' | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  // Poll for PDF status when we have a jobId
+  useEffect(() => {
+    if (!pdfJobId) return;
+
+    const checkStatus = async () => {
+      try {
+        const status = await getPdfStatus(pdfJobId);
+        setPdfStatus(status.status);
+
+        if (status.status === 'completed' && status.pdfUrl) {
+          setPdfUrl(status.pdfUrl);
+          setIsUploading(false);
+        } else if (status.status === 'failed') {
+          setError(`PDF generation failed: ${status.message || 'Unknown error'}`);
+          setIsUploading(false);
+        }
+      } catch (err) {
+        console.error('Error checking PDF status:', err);
+      }
+    };
+
+    // Check immediately and then set up interval
+    checkStatus();
+    const intervalId = setInterval(checkStatus, 3000);
+
+    // Clean up interval on unmount or when PDF is ready
+    return () => clearInterval(intervalId);
+  }, [pdfJobId]);
+
+  // Generate PDF from processed images
   const handleUpload = async () => {
     if (processedImages.length < minFiles) {
       setError(`Please process at least ${minFiles} images.`);
@@ -108,24 +143,30 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     try {
       setIsUploading(true);
       setError(null);
+      setPdfStatus('pending');
+      setPdfUrl(null);
 
-      // We would upload the processed images here
-      // For now, just simulate completion
-      const allProcessedUrls = processedImages.map((img) => img.processedUrl);
+      // Get all processed image URLs
+      const imageUrls = processedImages.map((img) => img.processedUrl);
+      console.log('Starting PDF generation with', imageUrls.length, 'images');
 
-      console.log('Processed images ready to upload:', allProcessedUrls);
+      // Generate the PDF
+      const jobId = await generatePdf(imageUrls, 'My Custom Coloring Book');
+      setPdfJobId(jobId);
 
-      // In a real implementation, you would upload these URLs to your backend
-      // For demo purposes we'll just show them as completed
+      console.log('PDF generation job started with ID:', jobId);
+
+      // Status updates will be handled by the useEffect polling
+
+      // Still call onUploadComplete for compatibility with old implementation
       if (onUploadComplete) {
-        // Pass the original files for backward compatibility
         onUploadComplete(processedImages.map((img) => img.originalFile));
       }
     } catch (err) {
-      console.error('Error uploading processed images:', err);
-      setError('Failed to upload processed images. Please try again.');
-    } finally {
+      console.error('Error generating PDF:', err);
+      setError('Failed to generate coloring book PDF. Please try again.');
       setIsUploading(false);
+      setPdfStatus('failed');
     }
   };
 
@@ -283,6 +324,37 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
           </div>
 
           <div className="mt-4">
+            {/* PDF Generation Status */}
+            {pdfUrl && (
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-green-700 font-medium">Your coloring book PDF is ready!</p>
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block mt-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Download PDF
+                </a>
+              </div>
+            )}
+
+            {pdfStatus === 'processing' && !pdfUrl && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+                  <p className="text-blue-700">Generating your coloring book PDF...</p>
+                </div>
+              </div>
+            )}
+
+            {pdfStatus === 'failed' && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-red-700">{error || 'Failed to generate PDF. Please try again.'}</p>
+              </div>
+            )}
+
+            {/* Create Button */}
             <button
               onClick={handleUpload}
               className={`px-4 py-2 rounded-md transition ${
@@ -292,7 +364,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
               }`}
               disabled={!canUpload || isUploading}
             >
-              {isUploading ? 'Uploading...' : 'Create Coloring Book'}
+              {isUploading && !pdfUrl ? 'Creating PDF...' : 'Create Coloring Book'}
             </button>
             {!canUpload && (
               <p className="text-sm text-gray-500 mt-1">

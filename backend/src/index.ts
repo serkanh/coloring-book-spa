@@ -7,6 +7,7 @@ import path from 'path';
 import uploadRoutes from './routes/upload';
 import orderRoutes from './routes/order';
 import userRoutes from './routes/user';
+import pdfRoutes from './routes/pdf';
 
 // Import utilities
 import { ensureBuckets } from './utils/ensureBuckets';
@@ -38,6 +39,7 @@ console.log(`Serving static files from ${tempDir} at /temp endpoint`);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/pdfs', pdfRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
