@@ -51,53 +51,36 @@ A full-stack web application that turns your photos into customized coloring boo
 
 ### Environment Files
 
-Before running the application, you need to set up the environment files:
+Before running the application, you need to set up the environment files. Example files are provided in the repository:
 
-#### Backend Environment (.env)
+#### Backend Environment
 
-Create a `backend/.env` file with the following variables:
+1. Copy the example file to create your own:
 
-```
-PORT=8000
-NODE_ENV=development
+   ```
+   cp backend/.env.example backend/.env
+   ```
 
-# Database configuration
-DATABASE_URL=postgresql://postgres:postgres@postgres:5432/coloringbook
+2. Edit `backend/.env` to customize your settings:
+   - Add your own OpenAI API key
+   - Configure AWS credentials if using real AWS services
+   - Adjust the minimum images required if needed
+   - Set your Clerk API key
 
-# AWS configuration
-AWS_ACCESS_KEY_ID=test
-AWS_SECRET_ACCESS_KEY=test
-AWS_REGION=us-east-1
+#### Frontend Environment
 
-# S3 bucket names
-S3_UPLOAD_BUCKET=coloringbook-uploads
-S3_PROCESSED_BUCKET=coloringbook-processed
-S3_FINAL_BUCKET=coloringbook-final-pdfs
+1. Copy the example file to create your own:
 
-# OpenAI API key for image processing
-OPENAI_API_KEY=your_openai_api_key
+   ```
+   cp frontend/.env.example frontend/.env.local
+   ```
 
-# Toggle to use mock processing instead of real OpenAI API
-USE_MOCK_OPENAI=false
+2. Edit `frontend/.env.local` to customize your settings:
+   - Set your Clerk publishable key
+   - Adjust the API URL if needed
+   - Change the minimum required images if desired
 
-# Minimum number of images required for creating a coloring book
-MIN_IMAGES_REQUIRED=2
-
-# Clerk authentication
-CLERK_API_KEY=your_clerk_api_key
-```
-
-#### Frontend Environment (.env.local)
-
-Create a `frontend/.env.local` file with the following variables:
-
-```
-VITE_API_URL=http://localhost:8000/api
-VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-
-# Minimum number of images required for creating a coloring book
-VITE_MIN_IMAGES_REQUIRED=2
-```
+The example files include all necessary configuration options with default values that work with the Docker setup.
 
 ### Running the Application
 
